@@ -1,0 +1,97 @@
+/* styles.css – Variation: Sediment Morphodynamics */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0e18;
+  overflow: hidden;
+  user-select: none;
+}
+
+#canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+#overlay {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: rgba(5, 12, 25, 0.75);
+  color: #c8dce8;
+  padding: 9px 13px;
+  border-radius: 7px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: none;
+  border: 1px solid rgba(80, 140, 200, 0.25);
+  max-width: 300px;
+}
+
+#overlay h2 {
+  font-size: 13px;
+  font-weight: bold;
+  color: #7ecff0;
+  margin-bottom: 5px;
+  letter-spacing: 0.5px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: #8aacbe;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+
+.legend {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.leg-bed { color: #e8b030; }
+.leg-sus { color: #b88050; }
+.leg-dep { color: #f8f040; }
+
+#metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 11px;
+  color: #aac8dc;
+  border-top: 1px solid rgba(80, 140, 200, 0.2);
+  padding-top: 5px;
+}
+
+#m-health    { color: #7ef0a8; }
+#m-waves     { color: #7ecff0; }
+#m-budget    { color: #b0e890; }
+#m-bedload   { color: #e8b030; }
+#m-suspended { color: #b88050; }
+#m-deposited { color: #f8f040; }
+#m-fps       { color: #a0a8b8; }
+
+#paused-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(5, 12, 25, 0.82);
+  color: #f0e07e;
+  font-family: 'Courier New', monospace;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 12px 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 224, 126, 0.4);
+  letter-spacing: 4px;
+  pointer-events: none;
+  display: none;
+}

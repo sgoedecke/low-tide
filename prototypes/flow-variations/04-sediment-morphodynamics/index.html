@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4. Sediment Morphodynamics – Sandcastle vs Waves</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="overlay">
+    <h2>4. Sediment Morphodynamics</h2>
+    <div class="controls">
+      <span>Left-drag: add sand &nbsp;|&nbsp; Right-drag: remove</span>
+      <span>W: wave &nbsp;|&nbsp; Space: pause &nbsp;|&nbsp; R: reset</span>
+    </div>
+    <div class="legend">
+      <span class="leg-bed">▪ Bedload</span>
+      <span class="leg-sus">▪ Suspended</span>
+      <span class="leg-dep">▪ Deposit</span>
+    </div>
+    <div id="metrics">
+      <span id="m-health">Castle: 100%</span>
+      <span id="m-waves">Waves: 0</span>
+      <span id="m-budget">Budget: 100%</span>
+      <span id="m-bedload">Bedload: 0.0</span>
+      <span id="m-suspended">Suspended: 0.0</span>
+      <span id="m-deposited">Deposited: 0.0</span>
+      <span id="m-fps">FPS: --</span>
+    </div>
+  </div>
+
+  <div id="paused-banner">PAUSED</div>
+
+  <script src="game.js"></script>
+</body>
+</html>
