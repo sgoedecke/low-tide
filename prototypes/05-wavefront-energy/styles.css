@@ -1,0 +1,137 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0a0a12;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  color: #e0e0e0;
+  user-select: none;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+#title-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #aaccff;
+  text-shadow: 0 0 8px #446699;
+  pointer-events: none;
+}
+
+#overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid #334;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #b0c8e0;
+  pointer-events: none;
+  min-width: 180px;
+}
+
+#overlay .key { color: #ffe080; font-weight: bold; }
+#overlay .mode-label { color: #80ffb0; }
+
+#metrics {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid #334;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #b0c8e0;
+  pointer-events: none;
+  min-width: 160px;
+  text-align: right;
+}
+
+#metrics .metric-label { color: #7090aa; }
+#metrics .metric-val { color: #ffe080; font-weight: bold; }
+
+#controls {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: all;
+}
+
+button {
+  background: rgba(20, 40, 70, 0.85);
+  border: 1px solid #3a5a8a;
+  color: #aaccff;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+button:hover {
+  background: rgba(40, 70, 130, 0.9);
+  border-color: #5a8acc;
+}
+
+button:active {
+  background: rgba(60, 100, 180, 0.9);
+}
+
+#mode-indicator {
+  position: absolute;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #80ffb0;
+  letter-spacing: 1px;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+#wave-bar {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  font-size: 10px;
+  color: #7090aa;
+  pointer-events: none;
+}
+
+#wave-bar .wv { color: #60c0ff; font-weight: bold; }

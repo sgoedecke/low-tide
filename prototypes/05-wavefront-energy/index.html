@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>5. Wavefront Energy</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <div id="title-bar">5. WAVEFRONT ENERGY</div>
+
+    <div id="overlay">
+      <div><span class="key">Drag</span> — add sand</div>
+      <div><span class="key">Shift+drag</span> — erase sand</div>
+      <div><span class="key">1</span> — sand brush</div>
+      <div><span class="key">2</span> — wall brush</div>
+      <div><span class="key">[ ]</span> — brush size</div>
+      <div><span class="key">W</span> — manual wave</div>
+      <div><span class="key">P</span> — pause/play</div>
+      <div><span class="key">R</span> — reset</div>
+      <div style="margin-top:4px;color:#7090aa">Mode: <span class="mode-label" id="mode-text">SAND</span></div>
+    </div>
+
+    <div id="metrics">
+      <div><span class="metric-label">Wave fronts: </span><span class="metric-val" id="m-fronts">0</span></div>
+      <div><span class="metric-label">Segments: </span><span class="metric-val" id="m-segs">0</span></div>
+      <div><span class="metric-label">Erosion events: </span><span class="metric-val" id="m-erosion">0</span></div>
+      <div><span class="metric-label">Waves sent: </span><span class="metric-val" id="m-waves">0</span></div>
+      <div><span class="metric-label">Castle HP: </span><span class="metric-val" id="m-hp">100%</span></div>
+      <div style="margin-top:4px"><span class="metric-label">FPS: </span><span class="metric-val" id="m-fps">0</span></div>
+    </div>
+
+    <div id="mode-indicator" id="mode-indicator"></div>
+
+    <div id="wave-bar">
+      Next wave: <span class="wv" id="wave-countdown">--</span>s
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btn-reset">RESET</button>
+    <button id="btn-pause">PAUSE</button>
+    <button id="btn-wave">WAVE NOW</button>
+    <button id="btn-mode">BRUSH: SAND</button>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
