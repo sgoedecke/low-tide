@@ -1,0 +1,167 @@
+/* styles.css – Variation 1: Breakers & Backwash */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #06090f;
+  overflow: hidden;
+  user-select: none;
+}
+
+#canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: crosshair;
+  image-rendering: auto;
+}
+
+#overlay {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: rgba(4, 10, 22, 0.78);
+  color: #c0d4e4;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+  border: 1px solid rgba(70, 130, 190, 0.28);
+  max-width: 290px;
+}
+
+#overlay h2 {
+  font-size: 14px;
+  font-weight: bold;
+  color: #6ecde8;
+  margin-bottom: 5px;
+  letter-spacing: 0.5px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: #7898ae;
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+
+/* ── Phase indicator ────────────────────────────────────── */
+
+#phase-display {
+  margin-bottom: 7px;
+  border-top: 1px solid rgba(70, 130, 190, 0.2);
+  padding-top: 6px;
+}
+
+#phase-label {
+  font-size: 12px;
+  color: #90b8d0;
+}
+
+#phase-name {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+/* Phase name colours are set by JS via data-phase attribute */
+#phase-name[data-phase="0"] { color: #6888a0; }  /* Idle     – slate   */
+#phase-name[data-phase="1"] { color: #50d0ff; }  /* Breaker  – bright cyan */
+#phase-name[data-phase="2"] { color: #90e870; }  /* Run-Up   – green   */
+#phase-name[data-phase="3"] { color: #f0a030; }  /* Backwash – amber   */
+#phase-name[data-phase="4"] { color: #d08850; }  /* Drain    – brown   */
+
+#phase-bar-track {
+  margin-top: 3px;
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#phase-bar {
+  height: 100%;
+  border-radius: 3px;
+  width: 0%;
+  transition: background-color 0.3s;
+}
+
+#phase-bar[data-phase="0"] { background: #4a6080; }
+#phase-bar[data-phase="1"] { background: #30b8e0; }
+#phase-bar[data-phase="2"] { background: #70c858; }
+#phase-bar[data-phase="3"] { background: #d88820; }
+#phase-bar[data-phase="4"] { background: #b07040; }
+
+/* ── Metrics ─────────────────────────────────────────────── */
+
+#metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 11px;
+  color: #9ab8cc;
+  border-top: 1px solid rgba(70, 130, 190, 0.18);
+  padding-top: 5px;
+  margin-bottom: 8px;
+}
+
+#m-health    { color: #70e898; }
+#m-waves     { color: #6ecde8; }
+#m-eroded    { color: #f0a060; }
+#m-deposited { color: #c8e870; }
+#m-particles { color: #a0c8f0; }
+#m-fps       { color: #8090a8; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+#buttons {
+  display: flex;
+  gap: 6px;
+  pointer-events: all;
+}
+
+#buttons button {
+  flex: 1;
+  background: rgba(30, 55, 85, 0.7);
+  color: #90bcd8;
+  border: 1px solid rgba(70, 130, 190, 0.35);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: background 0.15s, color 0.15s;
+}
+
+#buttons button:hover {
+  background: rgba(50, 90, 130, 0.8);
+  color: #d0e8f4;
+}
+
+#buttons button:active {
+  background: rgba(30, 70, 110, 0.9);
+}
+
+/* ── Paused banner ───────────────────────────────────────── */
+
+#paused-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(4, 10, 22, 0.85);
+  color: #f0d870;
+  font-family: 'Courier New', monospace;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 12px 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 216, 112, 0.4);
+  letter-spacing: 5px;
+  pointer-events: none;
+  display: none;
+}

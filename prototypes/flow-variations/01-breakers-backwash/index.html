@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Breakers &amp; Backwash – Sandcastle vs Waves</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="overlay">
+    <h2>Breakers &amp; Backwash</h2>
+
+    <div class="controls">
+      <span>Left-drag: add sand</span>
+      <span>Right-drag: dig channels</span>
+      <span>W: trigger wave</span>
+      <span>Space/P: pause</span>
+      <span>R: reset</span>
+    </div>
+
+    <div id="phase-display">
+      <span id="phase-label">Phase: <strong id="phase-name">Idle</strong></span>
+      <div id="phase-bar-track"><div id="phase-bar"></div></div>
+    </div>
+
+    <div id="metrics">
+      <span id="m-health">Castle: 100%</span>
+      <span id="m-waves">Wave: 0</span>
+      <span id="m-eroded">Eroded: 0.0</span>
+      <span id="m-deposited">Deposited: 0.0</span>
+      <span id="m-particles">Particles: 0</span>
+      <span id="m-fps">FPS: --</span>
+    </div>
+
+    <div id="buttons">
+      <button id="btn-wave">Wave (W)</button>
+      <button id="btn-pause">Pause (Space)</button>
+      <button id="btn-reset">Reset (R)</button>
+    </div>
+  </div>
+
+  <div id="paused-banner">PAUSED</div>
+
+  <script src="game.js"></script>
+</body>
+</html>
