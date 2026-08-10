@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2. Vortex Shedding – Sandcastle vs Waves</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="overlay">
+    <h2>2. Vortex Shedding</h2>
+    <div class="controls">
+      <span>Left-drag: add sand &nbsp; Right-drag: remove sand</span>
+      <span>W: wave &nbsp; Space: pause &nbsp; R: reset</span>
+    </div>
+    <div class="slider-row">
+      <label for="turb-slider">Turbulence</label>
+      <input type="range" id="turb-slider" min="0" max="100" value="50">
+      <span id="turb-val">50%</span>
+    </div>
+    <div class="btn-row">
+      <button id="heatmap-toggle">Curl heatmap: OFF</button>
+    </div>
+    <div id="metrics">
+      <span id="m-health">Castle: 100%</span>
+      <span id="m-waves">Waves: 0</span>
+      <span id="m-eroded">Eroded: 0.0</span>
+      <span id="m-curl">Max curl: 0.00</span>
+      <span id="m-turb">Turb: 50%</span>
+      <span id="m-fps">FPS: --</span>
+    </div>
+  </div>
+
+  <div id="paused-banner">PAUSED</div>
+
+  <script src="game.js"></script>
+</body>
+</html>
