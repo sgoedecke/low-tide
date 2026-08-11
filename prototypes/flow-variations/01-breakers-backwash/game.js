@@ -50,7 +50,7 @@ const origTerrain    = new Float32Array(N);
 let   initCastleMass = 0;
 
 // -- PARTICLE POOL (typed arrays + free-list stack) ------------------------
-const MAX_P    = 5000;
+const MAX_P    = 7000;
 const pX       = new Float32Array(MAX_P);   // position x  (grid coords)
 const pY       = new Float32Array(MAX_P);   // position y
 const pVx      = new Float32Array(MAX_P);   // velocity x
@@ -89,7 +89,7 @@ function pDie(i) {
 // Circular, linear-falloff kernel of radius SPLAT_R.
 // Weights normalised to sum=1 so each particle contributes pVol*DEPTH_SCALE
 // total depth-units spread smoothly across neighbouring cells.
-const SPLAT_R = 3;
+const SPLAT_R = 4;
 const _kDI = [], _kDJ = [], _kW = [];
 let   SK_N  = 0;
 (function buildKernel() {
@@ -118,17 +118,17 @@ const smBuf  = new Float32Array(N);
 
 // -- PARTICLE / WAVE CONSTANTS ---------------------------------------------
 const DEPTH_SCALE     = 5.0;   // depth contributed by one vol=1 particle
-const OCEAN_P_TARGET  = 900;   // steady-state count in ocean zone
-const P_VOL_OCEAN     = 0.80;  // volume of an ambient ocean particle
+const OCEAN_P_TARGET  = 1800;  // steady-state count in ocean zone
+const P_VOL_OCEAN     = 0.95;  // volume of an ambient ocean particle
 const P_VOL_WAVE      = 2.20;  // volume of a wave-injected particle
 const P_MAX_AGE       = 380;   // frames before a beach particle expires
-const P_SURF_PRESS    = 0.40;  // -(nabla surface) force coefficient
+const P_SURF_PRESS    = 1.05;  // -(nabla surface) force coefficient
 const P_DRAG_FLUID    = 0.984; // velocity multiplier per frame in water
 const P_DRAG_SAND     = 0.905; // velocity multiplier per frame on sandy bed
 const P_MAX_VEL       = 6.0 * GRID_SCALE;
 const P_BKWSH_FORCE   = 0.055 * GRID_SCALE;  // seaward body force, BACKWASH
 const P_DRAIN_FORCE   = 0.022 * GRID_SCALE;  // seaward body force, DRAIN
-const WAVE_SPAWN_PEAK = 30;   // particles/frame at peak injection
+const WAVE_SPAWN_PEAK = 40;   // particles/frame at peak injection
 
 // -- PHASE STATE MACHINE ---------------------------------------------------
 const PHASE       = { IDLE: 0, INCOMING: 1, RUNUP: 2, BACKWASH: 3, DRAIN: 4 };
@@ -261,7 +261,7 @@ function maintainOcean() {
     if (pLive[i] && pX[i] < OCEAN_WIDTH) oceanCount++;
   }
   const deficit   = OCEAN_P_TARGET - oceanCount;
-  const spawnRate = deficit > 25 ? 25 : (deficit < 0 ? 0 : deficit);
+  const spawnRate = deficit > 45 ? 45 : (deficit < 0 ? 0 : deficit);
 
   for (let s = 0; s < spawnRate; s++) {
     if (pFreeN === 0) break;
@@ -480,10 +480,10 @@ function rasterise() {
   }
 }
 
-// Two-pass 3x3 box blur on depth for smooth, artifact-free water coverage.
+// Three-pass 3x3 box blur turns particle density into a continuous water skin.
 function smoothDepth() {
   const inv9 = 1 / 9;
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 3; pass++) {
     for (let j = 1; j < GH - 1; j++) {
       for (let i = 1; i < GW - 1; i++) {
         const k = j * GW + i;
@@ -717,7 +717,419 @@ function resetSimulation() {
   rasterise();
   smoothDepth();
   initTracers();
+  gpuSwarm.reset();
 }
+
+// -- GPU MICRO-PARTICLE SWARM -----------------------------------------------
+// One-way coupling: GPU particles READ the CPU-derived vx/vy/depth/terrain
+// arrays each frame via a WebGL2 texture upload (the "flow field") but NEVER
+// write back. Terrain erosion and bulk water transport remain exclusively in
+// the CPU Lagrangian macro-particle system above. The GPU swarm is a purely
+// visual density layer that advects through the CPU-derived mean flow.
+const gpuSwarm = (() => {
+  // ── WebGL2 context ────────────────────────────────────────────────────────
+  const glc = document.getElementById('gl-canvas');
+  const gl  = glc.getContext('webgl2', { alpha: true, premultipliedAlpha: false,
+                                         antialias: false, depth: false });
+  const NOOP = { gpuCount: 0, active: false, fallbackMsg: '',
+                 update() {}, render() {}, resize() {}, reset() {} };
+  if (!gl) {
+    console.warn('[gpuSwarm] WebGL2 unavailable');
+    return Object.assign({}, NOOP, { fallbackMsg: 'no WebGL2' });
+  }
+
+  // Float render targets required for ping-pong state textures
+  const extF  = gl.getExtension('EXT_color_buffer_float');
+  const extHF = extF ? null : gl.getExtension('EXT_color_buffer_half_float');
+  if (!extF && !extHF) {
+    console.warn('[gpuSwarm] no float FBO support');
+    return Object.assign({}, NOOP, { fallbackMsg: 'no float FBO' });
+  }
+  const iFmt = extF ? gl.RGBA32F : gl.RGBA16F;
+  // WebGL2 spec table 3.2: both RGBA32F and RGBA16F accept (RGBA, FLOAT) uploads
+  const UPLOAD_TYPE = gl.FLOAT;
+
+  // ── Particle count — prefer 1024×512 = 524,288; fall back gracefully ──────
+  const maxT = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  const texW = maxT >= 1024 ? 1024 : 512;
+  const texH = maxT >= 512  ? 512  : 256;
+  const gpuCount = texW * texH;
+
+  // ── GLSL: update vertex (full-screen triangle, no vertex buffer needed) ────
+  const UPD_VS = `#version 300 es
+void main() {
+  float x = float((gl_VertexID & 1) << 2) - 1.0;
+  float y = float((gl_VertexID & 2) << 1) - 1.0;
+  gl_Position = vec4(x, y, 0.0, 1.0);
+}`;
+
+  // ── GLSL: update fragment — simulate one particle per texel ───────────────
+  const UPD_FS = `#version 300 es
+precision highp float;
+
+// State textures (read-only this frame)
+uniform sampler2D u_posAge; // rg = grid pos, b = age, a = seed
+uniform sampler2D u_vel;    // rg = velocity (vx, vy)
+
+// CPU flow field: r=vx_cpu  g=vy_cpu  b=depth  a=terrain  (240x150 grid)
+uniform sampler2D u_flow;
+
+uniform vec2  u_texSize;   // particle texture dimensions (e.g. 1024, 512)
+uniform vec2  u_gridSize;  // simulation grid (240, 150)
+uniform float u_time;      // frame counter for noise seeding
+uniform float u_dt;
+uniform float u_phase;     // 0=idle 1=incoming 2=runup 3=backwash 4=drain
+uniform float u_oceanW;    // OCEAN_WIDTH in grid coords
+uniform float u_blockH;    // solid terrain threshold (P.blockH)
+
+layout(location = 0) out vec4 o_posAge;
+layout(location = 1) out vec4 o_vel;
+
+// ── 2-D hash for turbulence ───────────────────────────────────────────────
+float hash(vec2 p) {
+  p = fract(p * vec2(127.1, 311.7));
+  return fract(sin(dot(p, vec2(43758.5453, 14591.847))));
+}
+
+// ── Manual bilinear sample (avoids OES_texture_float_linear dependency) ───
+vec4 sampleFlow(vec2 pos) {
+  vec2 p = pos - 0.5;
+  vec2 f = fract(p);
+  ivec2 p0 = ivec2(clamp(floor(p),             vec2(0.0), u_gridSize - 1.0));
+  ivec2 p1 = ivec2(clamp(floor(p) + vec2(1,0), vec2(0.0), u_gridSize - 1.0));
+  ivec2 p2 = ivec2(clamp(floor(p) + vec2(0,1), vec2(0.0), u_gridSize - 1.0));
+  ivec2 p3 = ivec2(clamp(floor(p) + vec2(1,1), vec2(0.0), u_gridSize - 1.0));
+  return mix(
+    mix(texelFetch(u_flow, p0, 0), texelFetch(u_flow, p1, 0), f.x),
+    mix(texelFetch(u_flow, p2, 0), texelFetch(u_flow, p3, 0), f.x), f.y);
+}
+
+void main() {
+  ivec2 c   = ivec2(gl_FragCoord.xy);
+  vec4  pa  = texelFetch(u_posAge, c, 0);
+  vec4  vl  = texelFetch(u_vel,    c, 0);
+
+  float x = pa.x, y = pa.y, age = pa.z, sd = pa.w;
+  float pvx = vl.x, pvy = vl.y;
+
+  // Sample CPU-derived flow field at this particle's grid position.
+  // fvx/fvy are the mean bulk-flow velocities rasterised from CPU particles.
+  vec4  fl  = sampleFlow(vec2(x, y));
+  float fvx = fl.x, fvy = fl.y, fd = fl.z, ft = fl.w;
+
+  // ── Respawn conditions ───────────────────────────────────────────────────
+  bool dead = age < 0.0
+    || x < 0.0 || x >= u_gridSize.x
+    || y < 0.0 || y >= u_gridSize.y
+    || ft > u_blockH                                    // inside solid terrain
+    || (fd < 0.012 && age > 45.0 && x > u_oceanW*1.4); // dried out on beach
+
+  if (dead) {
+    // Respawn uniformly across ocean zone; stagger ages to avoid burst effects.
+    float r1 = hash(vec2(sd + u_time*0.031, float(c.x)*0.17 + float(c.y)*0.13));
+    float r2 = hash(vec2(float(c.y)*0.19   + u_time*0.027,   sd*0.41));
+    float r3 = hash(vec2(u_time*0.013 + sd*1.73, float(c.x + c.y)));
+    x   = r1 * u_oceanW * 1.1;
+    y   = r2 * u_gridSize.y;
+    age = r3 * 60.0;
+    // Evolve seed so next respawn lands somewhere different
+    sd  = fract(sd * 1.6180339 + u_time*0.00713 + float(c.x)*0.00031);
+    pvx = 0.25 + r1 * 0.35;
+    pvy = (r2 - 0.5) * 0.22;
+
+  } else {
+    age += 1.0;
+
+    // ── Couple to CPU mean flow ────────────────────────────────────────────
+    // GPU particles blend their velocity toward the CPU rasterised field.
+    // Coupling strength scales with local depth: deeper water = stronger pull,
+    // keeping the swarm tightly attached to visible water while staying loose
+    // on the dry beach where depth≈0.
+    float ww  = clamp(fd * 7.0, 0.0, 1.0);
+    float cpl = mix(0.08, 0.44, ww);
+    pvx += (fvx - pvx) * cpl;
+    pvy += (fvy - pvy) * cpl;
+
+    // ── Turbulence noise ──────────────────────────────────────────────────
+    // Fine sub-particle churn independent of bulk flow; amplitude proportional
+    // to depth so open-water waves feel dense and dry sand stays still.
+    float spd  = length(vec2(pvx, pvy));
+    float tMag = 0.10 + fd * 0.28 + spd * 0.035;
+    pvx += (hash(vec2(x*0.074+u_time*0.033, y*0.092+sd*0.012))*2.0-1.0)*tMag;
+    pvy += (hash(vec2(y*0.081-u_time*0.029, x*0.063+sd*0.019))*2.0-1.0)*tMag;
+
+    // ── Phase body forces (mirror the CPU macro-particle forces) ──────────
+    if      (u_phase > 2.5 && u_phase < 3.5) pvx -= 0.055; // backwash
+    else if (u_phase >= 3.5)                  pvx -= 0.022; // drain
+
+    // ── Damping + speed cap ───────────────────────────────────────────────
+    pvx *= 0.93; pvy *= 0.93;
+    float s2 = length(vec2(pvx, pvy));
+    if (s2 > 9.0) { float sc = 9.0 / s2; pvx *= sc; pvy *= sc; }
+
+    // ── Integrate ─────────────────────────────────────────────────────────
+    x += pvx * u_dt;
+    y += pvy * u_dt;
+
+    // ── Boundary conditions ───────────────────────────────────────────────
+    if (x < 0.0) {
+      x   = hash(vec2(sd, u_time*0.019)) * u_oceanW;
+      pvx = abs(pvx) * 0.4;
+    }
+    if (x >= u_gridSize.x)    { age = -1.0; } // right edge → mark dead
+    if (y < 0.5)              { y = 0.5;               pvy =  abs(pvy)*0.4; }
+    if (y > u_gridSize.y-0.5) { y = u_gridSize.y-0.5;  pvy = -abs(pvy)*0.4; }
+  }
+
+  o_posAge = vec4(x, y, age, sd);
+  o_vel    = vec4(pvx, pvy, 0.0, 0.0);
+}`;
+
+  // ── GLSL: render vertex (gl_VertexID indexes state texture, no VBO) ───────
+  const RND_VS = `#version 300 es
+precision highp float;
+uniform sampler2D u_posAge;
+uniform sampler2D u_vel;
+uniform vec2  u_gridSize;
+uniform float u_ptSize;
+
+out float v_spd;
+
+void main() {
+  ivec2 sz  = textureSize(u_posAge, 0);
+  int   col = gl_VertexID % sz.x;
+  int   row = gl_VertexID / sz.x;
+  vec4  pa  = texelFetch(u_posAge, ivec2(col, row), 0);
+  vec4  vl  = texelFetch(u_vel,    ivec2(col, row), 0);
+
+  v_spd = clamp(length(vl.xy) / 7.0, 0.0, 1.0);
+
+  // Cull dead / out-of-bounds particles off screen
+  if (pa.z < 0.0 || pa.x < 0.0 || pa.x >= u_gridSize.x
+                  || pa.y < 0.0 || pa.y >= u_gridSize.y) {
+    gl_Position  = vec4(-10.0, -10.0, 0.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+  // Grid coords → NDC; flip Y because canvas Y=0 is top, NDC Y=+1 is top
+  vec2 ndc    = (pa.xy / u_gridSize) * 2.0 - 1.0;
+  ndc.y       = -ndc.y;
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  gl_PointSize = u_ptSize;
+}`;
+
+  // ── GLSL: render fragment — tiny translucent blue/cyan dot ────────────────
+  const RND_FS = `#version 300 es
+precision mediump float;
+in  float v_spd;
+out vec4  fragColor;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0; // 0=centre 1=edge
+  if (d > 1.0) discard;
+  float fade = 1.0 - d * d;
+  // Slow particles: deep ocean blue; fast (foamy) particles: bright cyan
+  vec3 col = mix(vec3(0.05, 0.40, 0.90), vec3(0.30, 0.88, 1.00), v_spd);
+  fragColor = vec4(col, (0.13 + 0.14 * v_spd) * fade);
+}`;
+
+  // ── Shader helpers ─────────────────────────────────────────────────────────
+  function mkShader(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      console.error('[gpuSwarm] shader compile error:\n', gl.getShaderInfoLog(sh));
+      gl.deleteShader(sh); return null;
+    }
+    return sh;
+  }
+  function mkProg(vsSrc, fsSrc) {
+    const vs = mkShader(gl.VERTEX_SHADER, vsSrc);
+    const fs = mkShader(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) return null;
+    const pg = gl.createProgram();
+    gl.attachShader(pg, vs); gl.attachShader(pg, fs);
+    gl.linkProgram(pg);
+    gl.deleteShader(vs); gl.deleteShader(fs);
+    if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) {
+      console.error('[gpuSwarm] link error:', gl.getProgramInfoLog(pg)); return null;
+    }
+    return pg;
+  }
+
+  const updProg = mkProg(UPD_VS, UPD_FS);
+  const rndProg = mkProg(RND_VS, RND_FS);
+  if (!updProg || !rndProg) return Object.assign({}, NOOP, { fallbackMsg: 'shader fail' });
+
+  // ── Uniform locations ──────────────────────────────────────────────────────
+  const uU = {};
+  ['posAge','vel','flow','texSize','gridSize','time','dt','phase','oceanW','blockH']
+    .forEach(n => { uU[n] = gl.getUniformLocation(updProg, 'u_' + n); });
+  const uR = {};
+  ['posAge','vel','gridSize','ptSize']
+    .forEach(n => { uR[n] = gl.getUniformLocation(rndProg, 'u_' + n); });
+
+  // ── Texture helpers ────────────────────────────────────────────────────────
+  function mkTex(w, h, fmt, data) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, fmt, w, h, 0, gl.RGBA, UPLOAD_TYPE, data || null);
+    return t;
+  }
+
+  // ── Initial seed data ──────────────────────────────────────────────────────
+  const initPA  = new Float32Array(texW * texH * 4);
+  const initVL  = new Float32Array(texW * texH * 4);
+  const _zeroPA = new Float32Array(texW * texH * 4); // pre-allocated zeros (re-used in reset)
+
+  function seedParticles() {
+    for (let i = 0; i < texW * texH; i++) {
+      const j = i << 2;
+      initPA[j]     = Math.random() * OCEAN_WIDTH;
+      initPA[j + 1] = Math.random() * GH;
+      initPA[j + 2] = Math.random() * 120;          // stagger ages to avoid burst
+      initPA[j + 3] = i * 0.001234 + Math.random(); // unique per-particle seed
+      initVL[j]     = 0.25 + Math.random() * 0.30;
+      initVL[j + 1] = (Math.random() - 0.5) * 0.22;
+    }
+  }
+  seedParticles();
+
+  // ── State ping-pong textures ───────────────────────────────────────────────
+  const paTex = [mkTex(texW, texH, iFmt, initPA), mkTex(texW, texH, iFmt, null)];
+  const vlTex = [mkTex(texW, texH, iFmt, initVL), mkTex(texW, texH, iFmt, null)];
+
+  // Flow field texture: always RGBA32F (upload-only, not an FBO target).
+  // Encodes CPU vx/vy/depth/terrain at the 240×150 simulation resolution.
+  const flowTex  = mkTex(GW, GH, gl.RGBA32F, null);
+  const flowData = new Float32Array(GW * GH * 4); // pre-allocated; reused every frame
+
+  // ── Framebuffer objects (MRT: posAge + vel written in one draw call) ───────
+  function mkFBO(pa, vl) {
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pa, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, vl, 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (st !== gl.FRAMEBUFFER_COMPLETE) {
+      console.error('[gpuSwarm] FBO incomplete: 0x' + st.toString(16)); return null;
+    }
+    return fbo;
+  }
+  const fbos = [mkFBO(paTex[0], vlTex[0]), mkFBO(paTex[1], vlTex[1])];
+  if (!fbos[0] || !fbos[1]) return Object.assign({}, NOOP, { fallbackMsg: 'FBO fail' });
+
+  // ── VAOs (empty — shaders rely solely on gl_VertexID and uniforms) ─────────
+  const updVAO = gl.createVertexArray();
+  const rndVAO = gl.createVertexArray();
+
+  let readIdx = 0;
+
+  // ── resize ─────────────────────────────────────────────────────────────────
+  function resize() {
+    const pr = Math.min(window.devicePixelRatio || 1, 2);
+    glc.width  = Math.round(window.innerWidth  * pr);
+    glc.height = Math.round(window.innerHeight * pr);
+  }
+  resize();
+
+  // ── reset (called from resetSimulation) ────────────────────────────────────
+  function reset() {
+    readIdx = 0;
+    seedParticles();
+    // Upload freshly seeded state to readIdx=0; clear the write buffer
+    gl.bindTexture(gl.TEXTURE_2D, paTex[0]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, iFmt, texW, texH, 0, gl.RGBA, UPLOAD_TYPE, initPA);
+    gl.bindTexture(gl.TEXTURE_2D, vlTex[0]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, iFmt, texW, texH, 0, gl.RGBA, UPLOAD_TYPE, initVL);
+    gl.bindTexture(gl.TEXTURE_2D, paTex[1]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, iFmt, texW, texH, 0, gl.RGBA, UPLOAD_TYPE, _zeroPA);
+    gl.bindTexture(gl.TEXTURE_2D, vlTex[1]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, iFmt, texW, texH, 0, gl.RGBA, UPLOAD_TYPE, _zeroPA);
+  }
+
+  // ── update (one GPU simulation step, called each frame when not paused) ────
+  function update(curPhase, curTime) {
+    const wi = 1 - readIdx;
+
+    // Pack CPU-derived flow field into RGBA float texture.
+    // This is the ONE-WAY coupling point: read CPU arrays, write to GPU texture.
+    for (let k = 0; k < N; k++) {
+      const j = k << 2;
+      flowData[j]     = vx[k];
+      flowData[j + 1] = vy[k];
+      flowData[j + 2] = depth[k];
+      flowData[j + 3] = terrain[k];
+    }
+    gl.bindTexture(gl.TEXTURE_2D, flowTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GW, GH, gl.RGBA, gl.FLOAT, flowData);
+
+    // Run update shader over state texture (one fragment = one particle)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[wi]);
+    gl.viewport(0, 0, texW, texH);
+    gl.useProgram(updProg);
+    gl.bindVertexArray(updVAO);
+
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, paTex[readIdx]);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, vlTex[readIdx]);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, flowTex);
+
+    gl.uniform1i(uU.posAge,   0);
+    gl.uniform1i(uU.vel,      1);
+    gl.uniform1i(uU.flow,     2);
+    gl.uniform2f(uU.texSize,  texW, texH);
+    gl.uniform2f(uU.gridSize, GW, GH);
+    gl.uniform1f(uU.time,     curTime);
+    gl.uniform1f(uU.dt,       P.dt);
+    gl.uniform1f(uU.phase,    curPhase);
+    gl.uniform1f(uU.oceanW,   OCEAN_WIDTH);
+    gl.uniform1f(uU.blockH,   P.blockH);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, glc.width, glc.height);
+    readIdx = wi;
+  }
+
+  // ── render (draw swarm onto the transparent GL canvas each frame) ──────────
+  function render() {
+    gl.viewport(0, 0, glc.width, glc.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(rndProg);
+    gl.bindVertexArray(rndVAO);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, paTex[readIdx]);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, vlTex[readIdx]);
+
+    const pr = Math.min(window.devicePixelRatio || 1, 2);
+    gl.uniform1i(uR.posAge,   0);
+    gl.uniform1i(uR.vel,      1);
+    gl.uniform2f(uR.gridSize, GW, GH);
+    // Point size in physical pixels, clamped to keep performance sane
+    gl.uniform1f(uR.ptSize,   Math.min(Math.max(1.6 * pr, 1.0), 3.5));
+
+    gl.drawArrays(gl.POINTS, 0, gpuCount);
+    gl.disable(gl.BLEND);
+  }
+
+  const modeStr = texW + '\u00d7' + texH + ', ' + (extF ? 'RGBA32F' : 'RGBA16F');
+  console.log('[gpuSwarm] ' + gpuCount.toLocaleString() + ' particles (' + modeStr + ')');
+
+  return { gpuCount, active: true, fallbackMsg: '', update, render, resize, reset };
+})();
+
+// Keep the GL canvas in sync with window resize
+window.addEventListener('resize', () => { if (gpuSwarm.active) gpuSwarm.resize(); });
 
 // -- RENDERING -------------------------------------------------------------
 // All rendering functions are unchanged -- they read the derived fields.
@@ -730,13 +1142,13 @@ function waterColorRGB(speed, d, sed, oceanFactor) {
     g =  64 + 105 * sn;
     b = 170 + 60  * sn;
   } else if (phase === PHASE.BACKWASH) {
-    r =  55 + 140 * sn;
-    g = 120 + 90  * sn;
-    b = 140 + 60  * sn;
+    r =  18 + 70  * sn;
+    g =  70 + 110 * sn;
+    b = 160 + 65  * sn;
   } else if (phase === PHASE.DRAIN) {
-    r =  70 + 110 * sn;
-    g = 100 + 80  * sn;
-    b = 120 + 50  * sn;
+    r =  20 + 65 * sn;
+    g =  62 + 90 * sn;
+    b = 150 + 55 * sn;
   } else {
     r =  15 + 55  * sn;
     g =  50 + 90  * sn;
@@ -795,9 +1207,9 @@ function renderPixels() {
         b = (132 - 20 * wetness) | 0;
       }
 
-      if (d > 0.015) {
-        const oceanFactor = Math.max(0, 1 - i / OCEAN_WIDTH);
-        const depthAlpha  = d < 0.90 ? d * 1.15 : 0.99;
+      const oceanFactor = Math.max(0, 1 - i / OCEAN_WIDTH);
+      if (d > 0.008 || oceanFactor > 0) {
+        const depthAlpha = Math.min(0.98, 1 - Math.exp(-d * 2.4));
         const alpha       = Math.max(depthAlpha, oceanFactor * 0.84);
         const [wr, wg, wb] = waterColorRGB(spd, d, sed, oceanFactor);
         r = (r * (1 - alpha) + wr * alpha) | 0;
@@ -927,7 +1339,10 @@ function render() {
   document.getElementById('m-waves').textContent     = `Wave: ${waveCount}`;
   document.getElementById('m-eroded').textContent    = `Eroded: ${erosionTotal.toFixed(1)}`;
   document.getElementById('m-deposited').textContent = `Deposited: ${depositionTotal.toFixed(1)}`;
-  document.getElementById('m-particles').textContent = `Particles: ${nLive}`;
+  const gpuSuffix = gpuSwarm.active
+    ? ` + ${Math.round(gpuSwarm.gpuCount / 1000)}k micro`
+    : (gpuSwarm.fallbackMsg ? ` (GPU: ${gpuSwarm.fallbackMsg})` : '');
+  document.getElementById('m-particles').textContent = `Water: ${nLive} macro${gpuSuffix}`;
   document.getElementById('m-fps').textContent       = `FPS: ${currentFps}`;
 }
 
@@ -1042,8 +1457,12 @@ function gameLoop() {
   fpsFrames++;
   const now = performance.now();
   if (now - fpsTime >= 1000) { currentFps = fpsFrames; fpsFrames = 0; fpsTime = now; }
-  if (!paused) simulate();
-  render();
+  if (!paused) {
+    simulate();
+    gpuSwarm.update(phase, frameNum);  // GPU step follows CPU (one-way coupling)
+  }
+  render();            // 2D canvas: terrain + depth field + tracers + HUD
+  gpuSwarm.render();   // WebGL canvas: micro-particle swarm overlay
 }
 
 // -- INIT ------------------------------------------------------------------

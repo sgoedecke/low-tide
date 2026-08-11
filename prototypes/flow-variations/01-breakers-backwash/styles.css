@@ -16,6 +16,16 @@ body {
   image-rendering: auto;
 }
 
+/* WebGL2 GPU micro-particle overlay — sits above the 2D canvas, transparent */
+#gl-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;   /* pass all clicks through to #canvas below */
+}
+
 #overlay {
   position: fixed;
   top: 10px;
