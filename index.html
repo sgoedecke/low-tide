@@ -1,54 +1,28 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta
-    name="description"
-    content="A top-down sandcastle simulation with breakers, run-up, and backwash erosion."
-  >
-  <title>Breakers &amp; Backwash</title>
-  <link rel="stylesheet" href="prototypes/flow-variations/01-breakers-backwash/styles.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#236d72">
+  <meta name="description" content="Dig channels, build sand walls, and let the tide find its way.">
+  <title>Low Tide</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <!-- WebGL2 micro-particle overlay: pointer-events:none so build/dig still works -->
-  <canvas id="gl-canvas"></canvas>
-
-  <div id="overlay">
-    <h2>Breakers &amp; Backwash</h2>
-
-    <div class="controls">
-      <span>Left-drag: add sand</span>
-      <span>Right-drag: dig channels</span>
-      <span>W: trigger wave</span>
-      <span>Space/P: pause</span>
-      <span>R: reset</span>
+  <main id="beach">
+    <canvas id="surface" aria-hidden="true"></canvas>
+    <canvas id="canvas" aria-label="Interactive beach. Mouse: left-drag to build, right-drag to dig. Touch or pen: use the selected tool. Keyboard: 1 for dig, 2 for build."></canvas>
+    <div class="tools" role="group" aria-label="Sand tools">
+      <button class="tool" data-tool="dig" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 3 6 6M18 6l-7 7M8 10l6 6-4 4c-5 3-9-1-6-6Z"/></svg>
+        <span>Dig</span>
+      </button>
+      <button class="tool selected" data-tool="build" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16l-2 13H6ZM8 8V6a4 4 0 0 1 8 0v2M3 8h18"/></svg>
+        <span>Build</span>
+      </button>
     </div>
-
-    <div id="phase-display">
-      <span id="phase-label">Phase: <strong id="phase-name">Idle</strong></span>
-      <div id="phase-bar-track"><div id="phase-bar"></div></div>
-    </div>
-
-    <div id="metrics">
-      <span id="m-health">Castle: 100%</span>
-      <span id="m-waves">Wave: 0</span>
-      <span id="m-eroded">Eroded: 0.0</span>
-      <span id="m-deposited">Deposited: 0.0</span>
-      <span id="m-particles">Particles: 0</span>
-      <span id="m-fps">FPS: --</span>
-    </div>
-
-    <div id="buttons">
-      <button id="btn-wave">Wave (W)</button>
-      <button id="btn-pause">Pause (Space)</button>
-      <button id="btn-reset">Reset (R)</button>
-    </div>
-  </div>
-
-  <div id="paused-banner">PAUSED</div>
-
-  <script src="prototypes/flow-variations/01-breakers-backwash/game.js"></script>
+  </main>
+  <script type="module" src="game.mjs"></script>
 </body>
 </html>
