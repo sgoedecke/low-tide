@@ -18,9 +18,9 @@ python3 -m http.server 8000
 Open http://localhost:8000. Use a server rather than opening `index.html` directly:
 the game uses JavaScript modules. All assets are local; there is no build step.
 
-With a mouse, **left-drag builds** and **right-drag digs**, regardless of the
-selected button. With a pen or finger, select Dig or Build using its button or
-the **1** / **2** keys, then drag to sculpt. Build is selected initially.
+Select Dig or Build using its button or the **1** / **2** keys, then left-drag
+with a mouse or drag with a pen or finger to sculpt. **Right-drag always digs**
+as a mouse shortcut. Build is selected initially.
 Hold still to keep digging deeper or building higher. The brush has a fixed size.
 
 There are no banners, readouts, sound, or controls other than Dig and Build.
@@ -48,6 +48,8 @@ the arrival spacing so the waves remain distinct. Combined height is bounded
 relative to the largest incoming swell, and adaptive flow steps account for the
 growing water depths.
 Water erodes and transports sand, deposits it as it slows, and steep edges slump.
+The offshore seabed slopes gradually deeper toward the top of the screen, giving
+transported sand more room to settle underwater without changing the shoreline.
 
 `renderer.mjs` draws screen-resolution WebGL2 materials: rounded terrain, soft
 shadows, sand grain, wet sand, refracted water, caustics, crest highlights and
@@ -60,10 +62,10 @@ handles pointer input, and advances physics in fixed timesteps, with smaller
 internal steps for deep water. The material renderer is capped at 1.8 million
 pixels to bound high-DPI graphics work.
 
-Run the physics regressions with Node's built-in test runner:
+Run the physics and input regressions with Node's built-in test runner:
 
 ```sh
-node --test simulation.test.mjs
+node --test simulation.test.mjs game.test.mjs
 ```
 
 The original experiments remain under `prototypes/`.

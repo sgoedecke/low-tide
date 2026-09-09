@@ -6,6 +6,7 @@ const WAVE_SPEED = 18;
 const MAX_WAVE_ANGLE = Math.PI / 14;
 const WAVE_COOLDOWN = .65;
 const SURF_RAMP_SECONDS = 90;
+const OFFSHORE_DROP = 6;
 
 // Water lives in cells; signed face fluxes transfer volume between neighbours.
 // An offshore reservoir exchanges water with the sea. Sand walls are elevations,
@@ -40,8 +41,11 @@ export class Beach {
         const i = y * w + x;
         const ripple = .018 * Math.sin(x * .22 + y * .1) + .012 * Math.sin(y * .33 - x * .12);
         const distance = y - shore;
+        // Ease into the existing foreshore with no extra drop at the reservoir edge.
+        const offshoreSlope = Math.max(0, 1 - y / this.offshore[x]);
         bed[i] = clamp(distance < 0 ? distance * .032
-          : Math.min(distance, 20) * .016 + Math.max(0, distance - 20) * .004, -1.5, .95) + ripple;
+          : Math.min(distance, 20) * .016 + Math.max(0, distance - 20) * .004, -1.5, .95)
+          + ripple - OFFSHORE_DROP * offshoreSlope ** 2;
         base[i] = bed[i];
         if (y < shore - 2) water[i] = Math.max(0, -bed[i]);
         this.wet[i] = water[i] > .001 ? 1 : 0;

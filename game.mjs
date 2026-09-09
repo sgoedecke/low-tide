@@ -174,7 +174,7 @@ function renderCursor() {
   ctx.lineWidth = 1.4;
   ctx.shadowColor = '#3b4d3d55';
   ctx.shadowBlur = 3;
-  ctx.fillStyle = (state.stroke?.tool ?? state.pointer.tool) === 'dig' ? '#345f6315' : '#fff5ce25';
+  ctx.fillStyle = (state.stroke?.tool ?? state.tool) === 'dig' ? '#345f6315' : '#fff5ce25';
   ctx.beginPath();
   ctx.ellipse(0, 0, BRUSH_RADIUS * scaleX, BRUSH_RADIUS * scaleY, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -198,8 +198,7 @@ function selectTool(tool) {
 function position(event) {
   const bounds = canvas.getBoundingClientRect();
   return { x: clamp((event.clientX - bounds.left) / bounds.width * W, 0, W - 1),
-    y: clamp((event.clientY - bounds.top) / bounds.height * H, 0, H - 1),
-    tool: event.pointerType === 'mouse' ? 'build' : state.tool };
+    y: clamp((event.clientY - bounds.top) / bounds.height * H, 0, H - 1) };
 }
 function paintLine(from, to, tool) {
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
@@ -219,7 +218,7 @@ canvas.addEventListener('pointerdown', event => {
   event.preventDefault();
   const point = position(event);
   state.pointer = point;
-  const tool = event.button === 2 ? 'dig' : point.tool;
+  const tool = event.button === 2 ? 'dig' : state.tool;
   state.stroke = { id: event.pointerId, last: point, tool };
   canvas.setPointerCapture(event.pointerId);
   beach.brush(point.x, point.y, BRUSH_RADIUS, tool, .25);

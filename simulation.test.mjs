@@ -27,6 +27,52 @@ test('a fresh beach has water across the top and no prebuilt structures', () => 
   assert.equal(beach.water[side + beach.width - 1], 0);
 });
 
+test('the ocean deepens toward the top without changing the foreshore', () => {
+  for (const [width, height] of [[160, 96], [256, 160], [256, 320]]) {
+    const beach = new Beach(width, height);
+    for (let x = 0; x < width; x++) {
+      assert.ok(beach.water[x] > 6, 'The top edge should have room for underwater deposition');
+      for (let y = 1; y < beach.offshore[x]; y++) {
+        const i = y * width + x;
+        assert.ok(beach.bed[i - width] < beach.bed[i], 'The offshore bed should slope toward deep water');
+        assert.ok(Math.abs(beach.bed[i] + beach.water[i]) < 1e-6, 'Initial sea surface should stay level');
+      }
+      for (let y = beach.offshore[x]; y < height; y++) {
+        const distance = y - beach.shoreline(x);
+        const ripple = .018 * Math.sin(x * .22 + y * .1) + .012 * Math.sin(y * .33 - x * .12);
+        const original = Math.max(-1.5, Math.min(.95, distance < 0 ? distance * .032
+          : Math.min(distance, 20) * .016 + Math.max(0, distance - 20) * .004)) + ripple;
+        assert.ok(Math.abs(beach.bed[y * width + x] - original) < 1e-6);
+      }
+    }
+    const bed = beach.bed.slice();
+    beach.brush(20, 3, 5, 'build');
+    beach.reset();
+    assert.deepEqual(beach.bed, bed);
+    assert.deepEqual(beach.base, bed);
+  }
+});
+
+test('the upper ocean stays predominantly submerged after prolonged sediment transport', () => {
+  const beach = new Beach(96, 160);
+  beach.wave();
+  advance(beach, 7200, { ocean: true, erosion: true });
+  let exposed = 0, cells = 0, deposited = 0;
+  for (let x = 0; x < beach.width; x++) {
+    for (let y = 0; y < beach.offshore[x] / 2; y++) {
+      const i = y * beach.width + x;
+      cells++;
+      if (beach.bed[i] >= -.025) exposed++;
+      deposited += Math.max(0, beach.bed[i] - beach.base[i]);
+    }
+  }
+  assert.ok(deposited > 1, 'Sediment should still be able to build up offshore');
+  assert.ok(exposed / cells < .01, `${exposed} of ${cells} upper-ocean cells rose above low tide`);
+  for (const field of ['water', 'bed', 'flowX', 'flowY', 'sediment']) {
+    assert.ok(beach[field].every(Number.isFinite), `${field} must remain finite`);
+  }
+});
+
 test('closed water flow conserves volume and never produces negative or non-finite depths', () => {
   const beach = fixture();
   for (let y = 0; y < beach.height; y++) {
