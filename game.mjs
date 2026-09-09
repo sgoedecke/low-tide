@@ -29,6 +29,7 @@ const motes = Array.from({ length: 320 }, () => ({
 }));
 const BRUSH_RADIUS = 5;
 const state = { tool: 'build', pointer: null, stroke: null };
+const sandSupply = $('#sand-supply');
 let cssWidth = rect.width, cssHeight = rect.height, scaleX = 1, scaleY = 1;
 const renderer = new BeachRenderer($('#surface'), beach);
 
@@ -186,6 +187,20 @@ function renderCursor() {
   ctx.restore();
 }
 
+function renderSandSupply() {
+  const radius = 3 + 25 * Math.sqrt(beach.sand / (beach.sand + 500));
+  const x = state.pointer ? state.pointer.x * scaleX + BRUSH_RADIUS * scaleX + radius + 10 : cssWidth - 44;
+  const y = state.pointer ? state.pointer.y * scaleY - BRUSH_RADIUS * scaleY - radius - 10 : 44;
+  sandSupply.style.width = sandSupply.style.height = `${radius * 2}px`;
+  sandSupply.style.left = `${clamp(x, radius + 8, cssWidth - radius - 8) - radius}px`;
+  sandSupply.style.top = `${clamp(y, radius + 8, cssHeight - radius - 8) - radius}px`;
+  const empty = beach.sand === 0;
+  sandSupply.dataset.empty = String(empty);
+  sandSupply.setAttribute('aria-label', empty
+    ? 'Out of sand. Dig to collect more.'
+    : 'Sand supply. Dig to collect more; build to spend it.');
+}
+
 function selectTool(tool) {
   endStroke();
   state.tool = tool;
@@ -267,6 +282,7 @@ function frame(now) {
   renderDetails();
   renderMotes();
   renderCursor();
+  renderSandSupply();
   requestAnimationFrame(frame);
 }
 beach.wave();

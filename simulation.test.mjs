@@ -158,6 +158,49 @@ test('dig and build sculpt the terrain; removed tools cannot silently build sand
   assert.deepEqual(beach.bed, before);
 });
 
+test('digging collects sand and building spends only the volume inside the brush', () => {
+  const beach = fixture();
+  assert.equal(beach.sand, 500);
+  const combined = total(beach.bed) + beach.sand;
+  for (const [x, y, tool] of [[24, 16, 'build'], [24, 16, 'dig'], [0, 2, 'dig'], [0, 2, 'build']]) {
+    const beforeBed = total(beach.bed), beforeSand = beach.sand;
+    beach.brush(x, y, 5, tool, .25);
+    const change = total(beach.bed) - beforeBed;
+    assert.ok(tool === 'dig' ? change < 0 : change > 0);
+    assert.ok(Math.abs(beach.sand - beforeSand + change) < 1e-5);
+    assert.ok(Math.abs(total(beach.bed) + beach.sand - combined) < 1e-5);
+  }
+  const before = beach.sand;
+  beach.brush(-100, -100, 5, 'build');
+  assert.equal(beach.sand, before, 'An empty footprint must not spend sand');
+  advance(beach, 60, { ocean: false, erosion: true });
+  assert.equal(beach.sand, before, 'Natural sediment movement must not change inventory');
+  beach.reset();
+  assert.equal(beach.sand, 500);
+});
+
+test('a partial supply scales the entire build footprint and empty builders can dig again', () => {
+  const full = fixture(), partial = fixture();
+  full.brush(24, 16, 5, 'build', .25);
+  const cost = 500 - full.sand;
+  partial.sand = cost / 4;
+  partial.brush(24, 16, 5, 'build', .25);
+  assert.equal(partial.sand, 0);
+  for (let i = 0; i < partial.size; i++) {
+    assert.ok(Math.abs(partial.bed[i] - full.bed[i] / 4) < 1e-7);
+  }
+  const emptyBed = partial.bed.slice();
+  for (let i = 0; i < 10; i++) partial.brush(24, 16, 5, 'build');
+  assert.deepEqual(partial.bed, emptyBed);
+  assert.equal(partial.sand, 0);
+  partial.brush(24, 16, 5, 'dig');
+  assert.ok(partial.sand > 0);
+  const dugBed = partial.bed.slice();
+  partial.brush(24, 16, 5, 'build');
+  assert.ok(partial.bed[16 * partial.width + 24] > dugBed[16 * partial.width + 24]);
+  assert.ok(partial.sand >= 0);
+});
+
 test('waves finish, rolling waves can be disabled, and reset clears transient state', () => {
   const beach = fixture();
   assert.equal(beach.wave(), true);

@@ -11,7 +11,8 @@
 <body>
   <main id="beach">
     <canvas id="surface" aria-hidden="true"></canvas>
-    <canvas id="canvas" aria-label="Interactive beach. Mouse: left-drag to build, right-drag to dig. Touch or pen: use the selected tool. Keyboard: 1 for dig, 2 for build."></canvas>
+    <canvas id="canvas" aria-label="Interactive beach. Drag to use the selected tool; right-drag to dig. Keyboard: 1 for dig, 2 for build. Digging collects sand; building spends it. The sand-colored circle shows your supply."></canvas>
+    <div id="sand-supply" role="img" aria-label="Sand supply. Dig to collect more; build to spend it."></div>
     <div class="tools" role="group" aria-label="Sand tools">
       <button class="tool" data-tool="dig" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 3 6 6M18 6l-7 7M8 10l6 6-4 4c-5 3-9-1-6-6Z"/></svg>

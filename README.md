@@ -23,7 +23,14 @@ with a mouse or drag with a pen or finger to sculpt. **Right-drag always digs**
 as a mouse shortcut. Build is selected initially.
 Hold still to keep digging deeper or building higher. The brush has a fixed size.
 
-There are no banners, readouts, sound, or controls other than Dig and Build.
+You start with 500 units of sand. Digging adds the volume removed to your supply;
+building spends the volume placed. When you run out, dig to replenish it.
+A sand-colored circle beside the cursor grows and shrinks with your supply,
+becoming a small empty ring when depleted. Without a pointer, it rests in the
+upper-right corner. There is no numeric readout or inventory cap, and naturally
+eroded sand does not change your supply.
+
+There are no banners, sound, or controls other than Dig and Build.
 Waves run automatically and steadily intensify while you play. After 90 seconds,
 new waves are twice as tall and the gaps in the set pattern are halved. Growth
 continues beyond that; arrivals have a minimum spacing of 0.65 seconds for

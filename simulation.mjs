@@ -33,6 +33,7 @@ export class Beach {
     this.nextWaveAt = 4.5;
     this.waveCount = 0;
     this.seaLevel = 0;
+    this.sand = 500;
     const { width: w, height: h, bed, base, water } = this;
     for (let x = 0; x < w; x++) {
       const shore = this.shoreline(x);
@@ -115,15 +116,24 @@ export class Beach {
     if (tool !== 'dig' && tool !== 'build') {
       throw new RangeError('Sand tool must be dig or build.');
     }
+    const changes = [];
+    let volume = 0;
     for (let y = Math.max(2, Math.floor(cy - radius)); y <= Math.min(h - 2, Math.ceil(cy + radius)); y++) {
       for (let x = Math.max(1, Math.floor(cx - radius)); x <= Math.min(w - 2, Math.ceil(cx + radius)); x++) {
         const d = Math.hypot(x - cx, y - cy) / radius;
         if (d >= 1) continue;
         const i = y * w + x;
         const falloff = .5 + .5 * Math.cos(d * Math.PI);
-        bed[i] += strength * falloff * (tool === 'dig' ? -1.8 : 1);
+        const amount = strength * falloff * (tool === 'dig' ? 1.8 : 1);
+        changes.push([i, amount]);
+        volume += amount;
       }
     }
+    // Scale the whole footprint evenly when only a partial brushful remains.
+    const spent = tool === 'build' ? Math.min(this.sand, volume) : 0;
+    const scale = tool === 'build' && volume > 0 ? spent / volume : 1;
+    for (const [i, amount] of changes) bed[i] += amount * scale * (tool === 'dig' ? -1 : 1);
+    this.sand += tool === 'dig' ? volume : -spent;
   }
 
   step(dt = 1 / 60, { ocean = true, erosion = true } = {}) {
